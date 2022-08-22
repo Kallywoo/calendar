@@ -16,31 +16,56 @@ export const Dropdown = () => {
     clearTimeout(timeout);
   };
 
-  // media query values for which buttons should disappear and appear in the dropdown
+  // media query values for which buttons should disappear and appear in the dropdown (commented numbers are without sync)
   let todayPx = 493;
-  let weekPx = 576;
-  let monthPx = 683;
-  let yearPx = 683;
+  let weekPx = 605; // 576
+  let monthPx = 690; // 683
+  let yearPx = 767; // 683
+  let syncPx = 787;
 
   return (
     <>
-      <Outside mediaQ={todayPx} aria-label="Jump to Today" name="today">
+      <Outside 
+        mediaQ={todayPx} 
+        aria-label="Jump to Today" 
+        name="today"
+      >
         Today
       </Outside>
-      <Divider>|</Divider>
-      <Outside mediaQ={weekPx} aria-label="Filter by Week" name="week">
+      <Divider aria-hidden={true}>|</Divider>
+      <Outside 
+        mediaQ={weekPx} 
+        aria-label="Filter by Week" 
+        name="week"
+      >
         Week
       </Outside>
-      <Outside mediaQ={monthPx} aria-label="Filter by Month" name="month">
+      <Outside 
+        mediaQ={monthPx} 
+        aria-label="Filter by Month" 
+        name="month"
+      >
         Month
       </Outside>
-      <Outside mediaQ={yearPx} aria-label="Filter by Year" name="year">
+      <Outside 
+        mediaQ={yearPx} 
+        aria-label="Filter by Year" 
+        name="year"
+      >
         Year
+      </Outside>
+      <Divider mediaQ={weekPx} aria-hidden={true}>|</Divider>
+      <Outside 
+        mediaQ={syncPx} 
+        aria-label="Filter by Year" 
+        name="sync"
+      >
+        Sync
       </Outside>
       {open && <Backdrop mediaQ={open} onClick={() => setOpen(false)} />}
       <Header onBlur={() => onBlurHandler()} onFocus={() => onFocusHandler()}>
         <Button
-          mediaQ={yearPx}
+          mediaQ={syncPx}
           onClick={() => setOpen(!open)}
           aria-label={!open ? `Open "All Filters"` : `Close "All Filters"`}
         >
@@ -48,17 +73,40 @@ export const Dropdown = () => {
         </Button>
         {open && (
           <List>
-            <Inside mediaQ={todayPx} aria-label="Jump to Today" name="today">
+            <Inside 
+              mediaQ={todayPx} 
+              aria-label="Jump to Today" 
+              name="today"
+            >
               Today
             </Inside>
-            <Inside mediaQ={weekPx} aria-label="Filter by Week" name="week">
+            <Inside 
+              mediaQ={weekPx} 
+              aria-label="Filter by Week" 
+              name="week"
+            >
               Week
             </Inside>
-            <Inside mediaQ={monthPx} aria-label="Filter by Month" name="month">
+            <Inside 
+              mediaQ={monthPx} 
+              aria-label="Filter by Month" 
+              name="month"
+            >
               Month
             </Inside>
-            <Inside mediaQ={yearPx} aria-label="Filter by Year" name="year">
+            <Inside 
+              mediaQ={yearPx} 
+              aria-label="Filter by Year" 
+              name="year"
+            >
               Year
+            </Inside>
+            <Inside 
+              mediaQ={syncPx} 
+              aria-label="Filter by Year" 
+              name="sync"
+            >
+              Sync
             </Inside>
           </List>
         )}
@@ -80,11 +128,11 @@ const Outside = styled.button`
 
   &:hover {
     background-color: lightgrey;
-  }
+  };
 
   @media only screen and (max-width: ${(props) => props.mediaQ}px) {
     display: none;
-  } ;
+  };
 `;
 
 const Button = styled.button`
@@ -103,16 +151,20 @@ const Button = styled.button`
   &:hover,
   &:active {
     background-color: lightgrey;
-  }
+  };
 
   @media only screen and (max-width: ${(props) => props.mediaQ}px) {
     display: block;
-  } ;
+  };
 `;
 
 const Divider = styled.span`
   font-size: 1.5em;
   margin: 0em 0.5em;
+
+  @media only screen and (max-width: ${(props) => props.mediaQ}px) {
+    display: none;
+  };
 `;
 
 const List = styled.div`
@@ -136,7 +188,7 @@ const Inside = styled(Outside)`
 
   @media only screen and (max-width: ${(props) => props.mediaQ}px) {
     display: block;
-  } ;
+  };
 `;
 
 const Backdrop = styled.div`
