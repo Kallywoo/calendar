@@ -2,16 +2,34 @@ import React from "react";
 import styled from "styled-components";
 
 export const Hour = ({ hour, index, date, isPadding, isCurrentDay }) => {
+
+  const aria = () => {
+    if (index === 0 || index === 12) {
+      return `12${index === 12 ? 'pm' : 'am'}`;
+    } else {
+      return `${index < 12 ? `${index}am` : `${index - 12}pm`}`;
+    };
+  };
+
   return (
     <HourContainer
       isPadding={isPadding}
       isCurrentDay={isCurrentDay}
       hour={hour}
+      aria-label={aria()}
     >
-      <StyledHour id={`${date}_${index}_1`} name="add-event">
+      <StyledHour 
+        id={`${date}_${index}_1`} 
+        name="add-event" 
+        aria-label="0 to 30 minutes"
+      >
         {""}
       </StyledHour>
-      <StyledHour2 id={`${date}_${index}_2`} name="add-event">
+      <StyledHour2 
+        id={`${date}_${index}_2`} 
+        name="add-event" 
+        aria-label="30 to 60 minutes"
+      >
         {""}
       </StyledHour2>
     </HourContainer>

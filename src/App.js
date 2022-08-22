@@ -6,7 +6,7 @@ import { Hour } from "./Hour";
 import { Modal } from "./Modal";
 import { reducer } from "./Reducer";
 import { dayGenerator, hourGenerator, dateGenerator } from "./Generator";
-import { addEvent as addEventApi, editEvent as editEventApi, deleteEvent as deleteEventApi } from "./Events";
+import { getEvents as getEventsApi, addEvent as addEventApi, editEvent as editEventApi, deleteEvent as deleteEventApi } from "./api";
 import { Dropdown } from "./Dropdown";
 
 // inspired by https://www.youtube.com/watch?v=m9OSBJaQTlM
@@ -24,8 +24,8 @@ import { Dropdown } from "./Dropdown";
 // - See if there's an API for all dates of holidays and auto populate?
 // - Add reminder option and alert if you're in the range of time set on event
 // - Create "Are you sure?" dialog when deleting an Event
-// - Link and write functions for storage of events in DynamoDB
-// - Make tests (with Jest?)
+// - Add auth register/login, allow users to only see their own events
+// - Create S3 bucket
 
 function App() {
 
@@ -74,13 +74,13 @@ function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const initial = {
-    id: null,
-    title: "",
-    timeFrom: null,
-    timeTo: null,
-    description: "",
-    allDay: false,
-    color: "#0057ba",
+    EventID: '',
+    Title: "",
+    TimeFrom: '',
+    TimeTo: '',
+    Description: "",
+    AllDay: false,
+    Color: "#0057ba",
     // repeat: {
     //   daily: false,
     //   weekly: false,
@@ -92,7 +92,7 @@ function App() {
   };
 
   const [tempEvent, setTempEvent] = useState(initial);
-  const [events, setEvents] = useState(localStorage.getItem("events") ? JSON.parse(localStorage.getItem("events")) : []);
+  const [events, setEvents] = useState([]);
 
   const [cachedTab, setCachedTab] = useState(null);
   const modalRef = useRef(null);
@@ -102,7 +102,48 @@ function App() {
 
   const selectedDate = useRef(0);
 
+  // move these into redux?
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [cooldown, setCooldown] = useState(false);
+  const [error, setError] = useState('');
+
   // #region Render functions
+
+  const request = async () => {
+    try {
+      const result = await getEventsApi();
+      setEvents(result);
+    } catch (err) {
+      setError(`Error getting events: ${err}`);
+    };
+  };
+
+  const getEvents = (type) => {
+    setIsLoaded(false);
+
+    // should probably remove sync for exploit purposes, but good for testing
+    if (type === 'sync') {
+      if (!cooldown) {
+        request();
+        setCooldown(true);
+
+        setTimeout(() => {
+          setCooldown(false);
+        }, 5000); // can be abused with page refresh!
+      } else {
+        console.log("too fast!");
+      };
+    } else {
+      !localStorage.getItem("events") ? request() : setEvents(JSON.parse(localStorage.getItem("events")));
+    };
+    
+    setIsLoaded(true);
+  };
+
+  useEffect(() => {
+    getEvents();
+  }, []);
+
   // UPDATE STATE WITH NEW WEEK/MONTH/YEAR VALUES FOR FUNCTIONS TO READ
 
   useEffect(() => {
@@ -157,6 +198,7 @@ function App() {
       <DayContainer
         key={`hour_${data.date}`}
         onClickCapture={(e) => openModal(e.target.id, e.target.name)}
+        aria-label={data.dayString}
       >
         <Day
           date={data.date}
@@ -169,10 +211,10 @@ function App() {
         <HoursGrid>
           <Events>
             {data?.events?.map((e) => {
-              if (e.allDay) return "";
+              if (e.AllDay) return "";
 
-              const [fromHour, fromMins] = e.timeFrom.split(":").map(Number);
-              const [toHour, toMins] = e.timeTo.split(":").map(Number);
+              const [fromHour, fromMins] = e.TimeFrom.split(":").map(Number);
+              const [toHour, toMins] = e.TimeTo.split(":").map(Number);
 
               return (
                 <Event
@@ -192,12 +234,12 @@ function App() {
                       : toHour + toHour / 1 + 3 // fill second half of the hour
                     }
                   `}
-                  key={`app_${e.id}`}
-                  id={`${e.id}`}
-                  style={{ backgroundColor: e.color }}
+                  key={`app_${e.EventID}`}
+                  id={`${e.EventID}`}
+                  style={{ backgroundColor: e.Color }}
                   isPadding={data.isPadding}
                 >
-                  {e.title}
+                  {e.Title}
                 </Event>
               );
             })}
@@ -276,64 +318,63 @@ function App() {
         <Month
           id={`${monthNumber}-${state.year}`}
           onClick={(e) => setToMonth(e.currentTarget.id)}
+          aria-label={`${month} ${state.year}`}
         >
-          <div aria-hidden="true">
-            <h2>{month}</h2>
-            <GridList>
-              {weekdays.map((day, i) => 
-                <MiniDay key={`week_${monthNumber}-${state.year}_${i}`}>
-                  {day.slice(0, 2)}
-                </MiniDay>
-              )}
-              {/* if neither the month or year matches the current one, no need to bother checking for current day and such */}
-              {(currentDate.getMonth() !== date.getMonth() ||
-                currentDate.getFullYear() !== date.getFullYear()) && (
-                <>
-                  {[...Array(data.paddingDays)].map((_, i) => (
-                    <MiniDay
-                      key={`padding_${monthNumber}-${state.year}_${i}`}
-                      isPadding={true}
-                    >
-                      {data.previousMonthLength - data.paddingDays + i + 1}
-                    </MiniDay>
-                  ))}
-                  {/* maybe just replace this with wall of manual days, probably performance waster */}
-                  {[...Array(28)].map((_, i) => (
-                    <MiniDay key={`month_${monthNumber}-${state.year}_${i}`}>
-                      {i + 1}
-                    </MiniDay>
-                  ))}{" "}
-                  {[...Array(data.monthLength - 28)].map((_, i) => (
-                    <MiniDay key={`end_${monthNumber}-${state.year}_${i}`}>
-                      {29 + i}
-                    </MiniDay>
-                  ))}
-                </>
-              )}
-              {/* if the month and year DO match, map over the month and check for current day etc */}
-              {currentDate.getMonth() === date.getMonth() &&
-                currentDate.getFullYear() === date.getFullYear() &&
-                [...Array(data.paddingDays + data.monthLength)].map((_, day) => {
-                  const dayData = dayGenerator(
-                    day,
-                    monthNumber + 1,
-                    state.year,
-                    data.paddingDays,
-                    data.previousMonthLength
-                  );
+          <h2>{month}</h2>
+          <GridList aria-hidden="true">
+            {weekdays.map((day, i) => 
+              <MiniDay key={`week_${monthNumber}-${state.year}_${i}`}>
+                {day.slice(0, 2)}
+              </MiniDay>
+            )}
+            {/* if neither the month or year matches the current one, no need to bother checking for current day and such */}
+            {(currentDate.getMonth() !== date.getMonth() ||
+              currentDate.getFullYear() !== date.getFullYear()) && (
+              <>
+                {[...Array(data.paddingDays)].map((_, i) => (
+                  <MiniDay
+                    key={`padding_${monthNumber}-${state.year}_${i}`}
+                    isPadding={true}
+                  >
+                    {data.previousMonthLength - data.paddingDays + i + 1}
+                  </MiniDay>
+                ))}
+                {/* maybe just replace this with wall of manual days, probably performance waster */}
+                {[...Array(28)].map((_, i) => (
+                  <MiniDay key={`month_${monthNumber}-${state.year}_${i}`}>
+                    {i + 1}
+                  </MiniDay>
+                ))}{" "}
+                {[...Array(data.monthLength - 28)].map((_, i) => (
+                  <MiniDay key={`end_${monthNumber}-${state.year}_${i}`}>
+                    {29 + i}
+                  </MiniDay>
+                ))}
+              </>
+            )}
+            {/* if the month and year DO match, map over the month and check for current day etc */}
+            {currentDate.getMonth() === date.getMonth() &&
+              currentDate.getFullYear() === date.getFullYear() &&
+              [...Array(data.paddingDays + data.monthLength)].map((_, day) => {
+                const dayData = dayGenerator(
+                  day,
+                  monthNumber + 1,
+                  state.year,
+                  data.paddingDays,
+                  data.previousMonthLength
+                );
 
-                  return (
-                    <MiniDay
-                      key={`mini_${dayData.date}`}
-                      isCurrentDay={dayData.isCurrentDay}
-                      isPadding={dayData.isPadding}
-                    >
-                      {dayData.day}
-                    </MiniDay>
-                  )}
+                return (
+                  <MiniDay
+                    key={`mini_${dayData.date}`}
+                    isCurrentDay={dayData.isCurrentDay}
+                    isPadding={dayData.isPadding}
+                  >
+                    {dayData.day}
+                  </MiniDay>
                 )}
-            </GridList>
-          </div>
+              )}
+          </GridList>
         </Month>
       </MonthContainer>
     );
@@ -407,6 +448,18 @@ function App() {
       },
     });
   };
+
+  // HANDLE FILTER MENU CLICKS
+
+  const handleClickCapture = (e) => {
+    if (e.target.name === 'sync') {
+      getEvents('sync');
+    } else if (e.target.name === 'today') {
+      setToday();
+    } else {
+      setFilter(e.target.name);
+    };
+  };
   // #endregion
 
   // #region Event functions
@@ -415,7 +468,7 @@ function App() {
   const openModal = (id, type) => {
     if (!type) return;
 
-    const [date, hour, clicked] = id.split("_"); // get info from passed id
+    const [, hour, clicked] = id.split("_"); // get info from passed id
     const hoursExist = hour ? true : false; // if split is successful, hour should exist
 
     const dateNow = new Date();
@@ -433,21 +486,19 @@ function App() {
     const isOne = clicked === "1"; // did they click the top half of the hour (00-30)?
     const parsedHour = parseInt(hour);
 
-    const index = events.findIndex((e) => e.date === date);
-
     setTempEvent(() => {
       return type === "edit-event"
-        ? events[index].events.find((e) => e.id === id)
+        ? events.find((e) => e.EventID === id)
         : {
             ...initial,
 
             // if the time is below 10, add a 0 | if they clicked the top half of the hour (00-30), make it the start of the hour
-            timeFrom: hoursExist
+            TimeFrom: hoursExist
               ? `${belowTen ? "0" : ""}${hour}:${isOne ? "00" : "30"}`
               : `${time}`,
 
             // if the time is below 10 or is the top half of 9, add a 0 | if they clicked the bottom half of the hour (30-60), make it the next hour
-            timeTo: hoursExist
+            TimeTo: hoursExist
               ? `${parsedHour + 1 < 10
                 ? "0"
                 : parsedHour === 9 && isOne
@@ -458,7 +509,7 @@ function App() {
           };
     });
 
-    selectedDate.current = id;
+    selectedDate.current = id; // store the element's id to pass onto addEvent/editEvent/deleteEvent
     setCachedTab(document.activeElement); // captures the last focused element to jump back to after the modal is closed
     dispatch({ type: "CHANGE_MODAL", payload: type });
     modalRef.current.openModal();
@@ -466,49 +517,46 @@ function App() {
 
   // SAVING A NEW EVENT
 
-  const addEvent = (e, id) => {
+  const addEvent = async (e, id) => {
     e.preventDefault();
 
-    const result = addEventApi(tempEvent, id);
-
-    setEvents(() => {
-      return events.find((e) => e.date === result.date)
-        ? events.map((e) => (e.date !== result.date ? e : result))
-        : [...events, result];
-    });
-
-    modalRef.current.closeModal();
+    try {
+      const result = await addEventApi(tempEvent, id);
+      setEvents([...events, result]);
+      closeModal();
+    } catch (err) {
+      setError(`Error adding event: ${err}`);
+    };
   };
 
   // SAVING AN EDITED EVENT
 
-  const editEvent = (e, id) => {
+  const editEvent = async (e, id) => {
     e.preventDefault();
 
-    const result = editEventApi(tempEvent, id);
-
-    setEvents(
-      events.map((e) => {
-        return e.date !== result.date ? e : result;
-      })
-    );
-
-    modalRef.current.closeModal();
+    try {
+      await editEventApi(tempEvent, id);
+      setEvents(events.map((e) => e.EventID !== id ? e : tempEvent));
+      closeModal();
+    } catch (err) {
+      setError(`Error editing event: ${err}`);
+    };
   };
 
   // DELETING AN EVENT
 
-  const deleteEvent = (id) => {
-    const date = id.split("_")[0];
+  const deleteEvent = async (id) => {
+    try {
+      await deleteEventApi(id);
+      setEvents(events.filter((e) => e.EventID !== id));
+      closeModal();
+    } catch (err) {
+      setError(`Error deleting event: ${err}`);
+    };
+  };
 
-    const result = deleteEventApi(date, id);
-
-    setEvents(
-      events.map((e) => {
-        return e.date !== date ? e : { ...e, events: result };
-      })
-    );
-
+  const closeModal = () => {
+    setError('');
     modalRef.current.closeModal();
   };
 
@@ -520,179 +568,180 @@ function App() {
   };
   // #endregion
 
-  return (
-    <>
-      <StyledApp>
-        <Header>
-          <DisplayContainer>
-            <Arrow aria-label="Go to Previous Month" onClick={() => cycle("left")}>
-              ←
-            </Arrow>
-            <Arrow aria-label="Go to Next Month" onClick={() => cycle("right")}>
-              →
-            </Arrow>
-            <Display>{state.dateDisplay}</Display>
-          </DisplayContainer>
-          <Flex>
-            <Flex
-              onClickCapture={(e) =>
-                e.target.name === "today"
-                  ? setToday()
-                  : setFilter(e.target.name)
-              }
-            >
-              <Dropdown />
+  if (!isLoaded) {
+    return <p>Loading...</p>
+  } else {
+    return (
+      <>
+        <StyledApp>
+          <Header>
+            <DisplayContainer>
+              <Arrow aria-label="Go to Previous Month" onClick={() => cycle("left")}>
+                ←
+              </Arrow>
+              <Arrow aria-label="Go to Next Month" onClick={() => cycle("right")}>
+                →
+              </Arrow>
+              <Display>{state.dateDisplay}</Display>
+            </DisplayContainer>
+            <Flex>
+              <Flex
+                onClickCapture={(e) => handleClickCapture(e)}
+              >
+                <Dropdown />
+              </Flex>
+              {/* <Button onClick={() => clearCache()}>Clear all Events</Button> */}
             </Flex>
-            {/* <Button onClick={() => clearCache()}>Clear all Events</Button> */}
-          </Flex>
-        </Header>
-        <Main>
-          {state.filter === "week" && (
-            <>
-              <HigherGrid>
-                <GridList>
-                  {weekdays.map((day, i) => 
-                    <ListItem key={`week_${day}-${i}`}>
-                      {day.slice(0, 3)}<Span>{day.slice(3, -1)}</Span>
-                    </ListItem>
-                  )}
-                </GridList>
-                <Times>
-                  {[...Array(24)].map((_, i) => (
-                    <li key={`time_${i}`}>{i}</li>
-                  ))}
-                </Times>
-                <DayGrid columns={7}>
-                  {[...Array(7)].map((_, i) => {
-                    return displayHours(state.newDay + i);
-                  })}
-                </DayGrid>
-              </HigherGrid>
-            </>
-          )}
-          {state.filter === "month" && (
-            <GridList>
-              {weekdays.map((day, i) => 
-                <ListItem key={`month_${day}-${i}`}>
-                  {day.slice(0, 3)}<Span>{day.slice(3, -1)}</Span>
-                </ListItem>
-              )}
-              {[...Array(state.paddingDays + state.monthLength)].map((_, i) => {
-                return displayDays(i);
-              })}
-            </GridList>
-          )}
-          {state.filter === "year" && (
-            <YearGrid>
-              {months.map((month, i) => {
-                return displayMonths(month, i);
-              })}
-            </YearGrid>
-          )}
-        </Main>
-      </StyledApp>
-      <Modal
-        ref={modalRef}
-        cache={cachedTab}
-        firstTab={firstTab}
-        lastTab={lastTab}
-        zIndex={4}
-        tabIndex={-1}
-      >
-        <form
-          onSubmit={(e) =>
-            state.modalType === "add-event"
-              ? addEvent(e, selectedDate.current)
-              : editEvent(e, selectedDate.current)
-          }
+          </Header>
+          <Main>
+            {state.filter === "week" && (
+              <>
+                <HigherGrid>
+                  <GridList>
+                    {weekdays.map((day, i) => 
+                      <ListItem key={`week_${day}-${i}`}>
+                        {day.slice(0, 3)}<Span>{day.slice(3)}</Span>
+                      </ListItem>
+                    )}
+                  </GridList>
+                  <Times>
+                    {[...Array(24)].map((_, i) => (
+                      <li key={`time_${i}`}>{i}</li>
+                    ))}
+                  </Times>
+                  <DayGrid columns={7}>
+                    {[...Array(7)].map((_, i) => {
+                      return displayHours(state.newDay + i);
+                    })}
+                  </DayGrid>
+                </HigherGrid>
+              </>
+            )}
+            {state.filter === "month" && (
+              <GridList>
+                {weekdays.map((day, i) => 
+                  <ListItem key={`month_${day}-${i}`}>
+                    {day.slice(0, 3)}<Span>{day.slice(3)}</Span>
+                  </ListItem>
+                )}
+                {[...Array(state.paddingDays + state.monthLength)].map((_, i) => {
+                  return displayDays(i);
+                })}
+              </GridList>
+            )}
+            {state.filter === "year" && (
+              <YearGrid>
+                {months.map((month, i) => {
+                  return displayMonths(month, i);
+                })}
+              </YearGrid>
+            )}
+          </Main>
+        </StyledApp>
+        <Modal
+          ref={modalRef}
+          cache={cachedTab}
+          firstTab={firstTab}
+          lastTab={lastTab}
+          zIndex={4}
+          tabIndex={-1}
         >
-          <ModalHeader>
-            <H2>{state.modalType === "add-event" ? "New" : "Edit"} Event</H2>
-            <Cancel
-              type="button"
-              aria-label="Cancel"
-              ref={lastTab}
-              onClick={() => modalRef.current.closeModal()}
-            >
-              X
-            </Cancel>
-          </ModalHeader>
-          <Fieldset>
-            <div>
-              <Color
-                type="color"
-                onChange={(e) =>
-                  setTempEvent({ ...tempEvent, color: e.target.value })
-                }
-                value={tempEvent.color}
-                ref={firstTab}
-              />
-              <Title
-                onChange={(e) =>
-                  setTempEvent({ ...tempEvent, title: e.target.value })
-                }
-                placeholder="Event Title"
-                value={tempEvent.title}
-                required
-              />
-              <label>
-                <Checkbox
-                  type="checkbox"
+          <form
+            onSubmit={(e) =>
+              state.modalType === "add-event"
+                ? addEvent(e, selectedDate.current)
+                : editEvent(e, selectedDate.current)
+            }
+          >
+            <ModalHeader>
+              <H2>{state.modalType === "add-event" ? "New" : "Edit"} Event</H2>
+              <Cancel
+                type="button"
+                aria-label="Cancel"
+                ref={lastTab}
+                onClick={() => closeModal()}
+              >
+                X
+              </Cancel>
+            </ModalHeader>
+            <Fieldset>
+              <div>
+                <Color
+                  type="color"
                   onChange={(e) =>
-                    setTempEvent({ ...tempEvent, allDay: e.target.checked })
+                    setTempEvent({ ...tempEvent, Color: e.target.value })
                   }
-                  checked={tempEvent.allDay}
+                  value={tempEvent.Color}
+                  ref={firstTab}
                 />
-                All day
-              </label>
-            </div>
-            <div>
-              <span>🕒 </span>
-              <Input
-                type="time"
+                <Title
+                  onChange={(e) =>
+                    setTempEvent({ ...tempEvent, Title: e.target.value })
+                  }
+                  placeholder="Event Title"
+                  value={tempEvent.Title}
+                  required
+                />
+                <label>
+                  <Checkbox
+                    type="checkbox"
+                    onChange={(e) =>
+                      setTempEvent({ ...tempEvent, AllDay: e.target.checked })
+                    }
+                    checked={tempEvent.AllDay}
+                  />
+                  All day
+                </label>
+              </div>
+              <div>
+                <span>🕒 </span>
+                <Input
+                  type="time"
+                  onChange={(e) =>
+                    setTempEvent({ ...tempEvent, TimeFrom: e.target.value })
+                  }
+                  aria-label="Event Time From"
+                  value={tempEvent.TimeFrom}
+                  disabled={tempEvent.AllDay === true}
+                  required={tempEvent.AllDay !== true}
+                />
+                <span> to </span>
+                <Input
+                  type="time"
+                  onChange={(e) =>
+                    setTempEvent({ ...tempEvent, TimeTo: e.target.value })
+                  }
+                  aria-label="Event Time To"
+                  value={tempEvent.TimeTo}
+                  disabled={tempEvent.AllDay === true}
+                  required={tempEvent.AllDay !== true}
+                />
+              </div>
+              <Description
                 onChange={(e) =>
-                  setTempEvent({ ...tempEvent, timeFrom: e.target.value })
+                  setTempEvent({ ...tempEvent, Description: e.target.value })
                 }
-                placeholder="Event Time From"
-                value={tempEvent.timeFrom}
-                disabled={tempEvent.allDay === true}
-                required={tempEvent.allDay !== true}
+                placeholder="Event Description"
+                value={tempEvent.Description}
               />
-              <span> to </span>
-              <Input
-                type="time"
-                onChange={(e) =>
-                  setTempEvent({ ...tempEvent, timeTo: e.target.value })
-                }
-                placeholder="Event Time To"
-                value={tempEvent.timeTo}
-                disabled={tempEvent.allDay === true}
-                required={tempEvent.allDay !== true}
-              />
-            </div>
-            <Description
-              onChange={(e) =>
-                setTempEvent({ ...tempEvent, description: e.target.value })
-              }
-              placeholder="Event Description"
-              value={tempEvent.description}
-            />
-            <Buttons>
-              {state.modalType === "edit-event" && (
-                <Delete
-                  type="button"
-                  onClick={() => deleteEvent(selectedDate.current)}
-                >
-                  Delete
-                </Delete>
-              )}
-              <ModalButton type="submit">Save</ModalButton>
-            </Buttons>
-          </Fieldset>
-        </form>
-      </Modal>
-    </>
-  );
+              <Buttons>
+                {state.modalType === "edit-event" && (
+                  <Delete
+                    type="button"
+                    onClick={() => deleteEvent(selectedDate.current)}
+                  >
+                    Delete
+                  </Delete>
+                )}
+                <ModalButton type="submit">Save</ModalButton>
+              </Buttons>
+            </Fieldset>
+          </form>
+          {error && <p>{error}</p>}
+        </Modal>
+      </>
+    );
+  };
 }
 
 export default App;

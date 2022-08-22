@@ -1,15 +1,9 @@
-import React, {
-  useState,
-  useEffect,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import styled from "styled-components";
 
 import { Portal } from "./Portal";
 
-export const Modal = forwardRef(
-  ({ cache, firstTab, lastTab, zIndex = 3, children }, ref) => {
+export const Modal = forwardRef(({ cache, firstTab, lastTab, zIndex = 3, children }, ref) => {
     const [display, setDisplay] = useState(false);
 
     useImperativeHandle(ref, () => {

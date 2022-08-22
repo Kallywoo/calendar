@@ -20,29 +20,29 @@ export const Day = ({ date, isPadding, isCurrentDay, events, dayString, children
     return (
       <ListItem
         ref={i === 0 ? firstTab : null}
-        key={`${origin}_${e.id}`}
-        color={e.color}
+        key={`${origin}_${e.EventID}`}
+        color={e.Color}
         $origin={origin}
       >
         <Event
-          id={`${e.id}`}
+          id={`${e.EventID}`}
           name="edit-event"
-          aria-label={`Edit ${e.title}`}
+          aria-label={`Edit ${e.Title}`}
           $origin={origin}
         >
           {origin === "list" && (
             <Times>
-              {e.allDay ? (
+              {e.AllDay ? (
                 <Time>All day</Time>
               ) : (
                 <>
-                  <Time>{e.timeFrom}</Time>
-                  <Time>{e.timeTo}</Time>
+                  <Time>{e.TimeFrom}</Time>
+                  <Time>{e.TimeTo}</Time>
                 </>
               )}
             </Times>
           )}
-          {e.title}
+          {e.Title}
         </Event>
       </ListItem>
     );

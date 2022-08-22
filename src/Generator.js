@@ -38,8 +38,12 @@ export const dayGenerator = (day, month, year, paddingDays, prevMonthLength, eve
     day = day + 1 - paddingDays; // remove the extra/padding days to count from 1+
   };
 
-  const dateString = `${day}-${month}-${year}`; // used as id, to track what day/month/year the button is on click
-  const eventsForDay = events?.find((event) => event.date === dateString); // find/grab all events for the current day
+  // add zeroes to the beginning of numbers for database specificity and week display
+  let zeroDay = day < 10 ? `0${day}` : day;
+  let zeroMonth = month < 10 ? `0${month}` : month;
+
+  const dateString = `${year}-${zeroMonth}-${zeroDay}`; // used as id, to track what day/month/year the button is on click
+  const eventsForDay = events?.filter((e) => e.EventID.includes(dateString)); // find/grab all events for the current day
   const isCurrentDay = `${day}/${month}/${year}` === currentDay ? true : false;
   const dayString = new Date(year, month - 1, day).toDateString(); // used for aria-label and title on events list
 
@@ -48,7 +52,7 @@ export const dayGenerator = (day, month, year, paddingDays, prevMonthLength, eve
     isCurrentDay,
     isPadding,
     date: dateString,
-    events: eventsForDay?.events,
+    events: eventsForDay,
     dayString,
   };
 };
@@ -71,21 +75,25 @@ export const hourGenerator = (day, month, year, prevMonthLength, monthLength, ev
     month = month === 12 ? 0 : month + 1; // if current month is December, set the next month's days to January, otherwise count up one
   };
 
-  let actualDay = day; // preserve original day (before day/month display edits) for dateString
+  // add zeroes to the beginning of numbers for database specificity and week display
+  let zeroDay = day < 10 ? `0${day}` : day;
+  let zeroMonth = month < 10 ? `0${month}` : month;
 
   if (day === 1) {
     // display first day with month number to help avoid confusion, append 0 under 10 for consistency
-    day = `01/${month < 10 ? `0` : ``}${month === 0 ? month + 1 : month}`;
+    day = `01/${zeroMonth === 0 ? zeroMonth + 1 : zeroMonth}`;
   };
 
-  const dateString = `${actualDay}-${month}-${year}`; // used as id, to track what day/month/year the button is on click
-  const eventsForDay = events?.find((event) => event.date === dateString); // find/grab all events for the current day
+  const dateString = `${year}-${zeroMonth}-${zeroDay}`; // used as id, to track what day/month/year the button is on click
+  const eventsForDay = events?.filter((e) => e.EventID.includes(dateString)); // find/grab all events for the current day
   const isCurrentDay = `${day}/${month}/${year}` === currentDay ? true : false;
+  const dayString = new Date(year, month - 1, day).toDateString(); // used for aria-label and title on events list
 
   return {
     day,
     isCurrentDay,
     date: dateString,
-    events: eventsForDay?.events,
+    events: eventsForDay,
+    dayString
   };
 };
